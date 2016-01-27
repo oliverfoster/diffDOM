@@ -3,9 +3,67 @@
 
     var diffcount;
 
+    var forEach = Array.prototype.forEach
+        ? function(obj, callback) {
+            obj.forEach(callback);
+        }
+        : function(obj, callback) {
+            if (obj instanceof Array) {
+                for (var i = 0, l = obj.length; i < l; i++) {
+                    callback(obj[i], i);
+                }
+            } else {
+                var keys = ObjectKeys(obj);
+                for (var i = 0, l = keys.length; i < l; i++) {
+                    callback(obj[keys[i]], keys[i]);
+                }
+            }
+        };
+
+    var ObjectKeys = Object.keys || function(o) {
+        if(Object(o) !== o){
+            throw new TypeError('Object.keys called on a non-enumerable');
+        }
+        var k= [], p;
+        for(p in o){ if(o.hasOwnProperty(p)) k[k.length]=p; }
+        return k;
+    };
+
+    var some = Array.prototype.some 
+        ? function(obj, callback) {
+            return obj.some(callback);
+        }
+        : function(obj, callback) {
+            for (var i = 0, l = obj.length; i < l; i++) {
+                if (callback(obj[i], i)) return true;
+            }
+        };
+
+    var indexOf = Array.prototype.indexOf
+        ? function(obj, value) {
+            return obj.indexOf(value);
+        }
+        : function(obj, value) {
+            for (var i = 0, l = obj.length; i < l; i++) {
+                if (obj[i] == value) return i;
+            }
+            return -1;
+        };
+
+    var every = Array.prototype.every 
+        ? function(obj, callback) {
+            return obj.every(callback);
+        }
+        : function(obj, callback) {
+            for (var i = 0, l = obj.length; i < l; i++) {
+                if (!callback(obj[i], i, obj)) return false;
+            }
+            return true;
+        };
+
     var Diff = function (options) {
         var diff = this;
-        Object.keys(options).forEach(function(option) {
+        forEach(ObjectKeys(options), function(option) {
             diff[option] = options[option];
         });
     };
@@ -50,31 +108,35 @@
 
     var SubsetMapping = function SubsetMapping(a, b) {
         this.old = a;
-        this.new = b;
+        this.newer = b;
     };
 
     SubsetMapping.prototype = {
         contains: function contains(subset) {
             if (subset.length < this.length) {
-                return subset.new >= this.new && subset.new < this.new + this.length;
+                return subset.newer >= this.newer && subset.newer < this.newer + this.length;
             }
             return false;
         },
         toString: function toString() {
-            return this.length + " element subset, first mapping: old " + this.old + " → new " + this.new;
+            return this.length + " element subset, first mapping: old " + this.old + " → new " + this.newer;
         }
     };
 
+    var spaceMatcher = / /g;
+
     var elementDescriptors = function(el) {
         var output = [];
-        if (el.nodeName !== '#text' && el.nodeName !== '#comment') {
-            output.push(el.nodeName);
-            if (el.attributes) {
-                if (el.attributes.class) {
-                    output.push(el.nodeName + '.' + el.attributes.class.replace(/ /g, '.'));
+        var nodeName = el.nodeName;
+        if (nodeName !== '#text' && nodeName !== '#comment') {
+            output[output.length] = nodeName;
+            var attributes = el.attributes;
+            if (attributes) {
+                if (attributes['class']) {
+                    output[output.length] = nodeName + '.' + attributes['class'].replace(spaceMatcher, '.');
                 }
-                if (el.attributes.id) {
-                    output.push(el.nodeName + '#' + el.attributes.id);
+                if (attributes.id) {
+                    output[output.length] = nodeName + '#' + attributes.id;
                 }
             }
 
@@ -86,8 +148,8 @@
         var uniqueDescriptors = {},
             duplicateDescriptors = {};
 
-        li.forEach(function(node) {
-            elementDescriptors(node).forEach(function(descriptor) {
+        forEach(li, function(node) {
+            forEach(elementDescriptors(node), function(descriptor) {
                 var inUnique = descriptor in uniqueDescriptors,
                     inDupes = descriptor in duplicateDescriptors;
                 if (!inUnique && !inDupes) {
@@ -108,7 +170,7 @@
             l2Unique = findUniqueDescriptors(l2),
             inBoth = {};
 
-        Object.keys(l1Unique).forEach(function(key) {
+        forEach(ObjectKeys(l1Unique), function(key) {
             if (l2Unique[key]) {
                 inBoth[key] = true;
             }
@@ -122,7 +184,7 @@
         delete tree.innerDone;
         delete tree.valueDone;
         if (tree.childNodes) {
-            return tree.childNodes.every(removeDone);
+            return every(tree.childNodes, removeDone);
         } else {
             return true;
         }
@@ -132,7 +194,7 @@
 
         var e1Attributes, e2Attributes;
 
-        if (!['nodeName', 'value', 'checked', 'selected', 'data'].every(function(element) {
+        if (!every(['nodeName', 'value', 'checked', 'selected', 'data'], function(element) {
                 if (e1[element] !== e2[element]) {
                     return false;
                 }
@@ -150,13 +212,13 @@
         }
 
         if (e1.attributes) {
-            e1Attributes = Object.keys(e1.attributes);
-            e2Attributes = Object.keys(e2.attributes);
+            e1Attributes = ObjectKeys(e1.attributes);
+            e2Attributes = ObjectKeys(e2.attributes);
 
             if (e1Attributes.length !== e2Attributes.length) {
                 return false;
             }
-            if (!e1Attributes.every(function(attribute) {
+            if (!every(e1Attributes, function(attribute) {
                     if (e1.attributes[attribute] !== e2.attributes[attribute]) {
                         return false;
                     }
@@ -169,7 +231,7 @@
             if (e1.childNodes.length !== e2.childNodes.length) {
                 return false;
             }
-            if (!e1.childNodes.every(function(childNode, index) {
+            if (!every(e1.childNodes, function(childNode, index) {
                     return isEqual(childNode, e2.childNodes[index]);
                 })) {
 
@@ -214,8 +276,8 @@
                     return true;
                 }
             }
-            if (e1.attributes.class && e1.attributes.class === e2.attributes.class) {
-                var classDescriptor = e1.nodeName + '.' + e1.attributes.class.replace(/ /g, '.');
+            if (e1.attributes['class'] && e1.attributes['class'] === e2.attributes['class']) {
+                var classDescriptor = e1.nodeName + '.' + e1.attributes['class'].replace(/ /g, '.');
                 if (classDescriptor in uniqueDescriptors) {
                     return true;
                 }
@@ -234,14 +296,14 @@
         }
 
         if (preventRecursion) {
-            return nodeList1.every(function(element, index) {
+            return every(nodeList1, function(element, index) {
                 return element.nodeName === nodeList2[index].nodeName;
             });
         } else {
             // note: we only allow one level of recursion at any depth. If 'preventRecursion'
             // was not set, we must explicitly force it to true for child iterations.
             childUniqueDescriptors = uniqueInBoth(nodeList1, nodeList2);
-            return nodeList1.every(function(element, index) {
+            return every(nodeList1, function(element, index) {
                 return roughlyEqual(element, nodeList2[index], childUniqueDescriptors, true, true);
             });
         }
@@ -260,9 +322,7 @@
     var findCommonSubsets = function(c1, c2, marked1, marked2) {
         var lcsSize = 0,
             index = [],
-            matches = Array.apply(null, new Array(c1.length + 1)).map(function() {
-                return [];
-            }), // set up the matching table
+            matches = makeArray(c1.length + 1, function() {return [];}), // set up the matching table
             uniqueDescriptors = uniqueInBoth(c1, c2),
             // If all of the elements are the same tag, id and class, then we can
             // consider them roughly the same even if they have a different number of
@@ -272,14 +332,14 @@
 
         if (subsetsSame) {
 
-            c1.some(function(element, i) {
+            some(c1, function(element, i) {
                 var c1Desc = elementDescriptors(element),
                     c2Desc = elementDescriptors(c2[i]);
                 if (c1Desc.length !== c2Desc.length) {
                     subsetsSame = false;
                     return true;
                 }
-                c1Desc.some(function(description, i) {
+                some(c1Desc, function(description, i) {
                     if (description !== c2Desc[i]) {
                         subsetsSame = false;
                         return true;
@@ -293,8 +353,8 @@
         }
 
         // fill the matches with distance values
-        c1.forEach(function(c1Element, c1Index) {
-            c2.forEach(function(c2Element, c2Index) {
+        forEach(c1, function(c1Element, c1Index) {
+            forEach(c2, function(c2Element, c2Index) {
                 if (!marked1[c1Index] && !marked2[c2Index] && roughlyEqual(c1Element, c2Element, uniqueDescriptors, subsetsSame)) {
                     matches[c1Index + 1][c2Index + 1] = (matches[c1Index][c2Index] ? matches[c1Index][c2Index] + 1 : 1);
                     if (matches[c1Index + 1][c2Index + 1] >= lcsSize) {
@@ -320,9 +380,20 @@
      * This should really be a predefined function in Array...
      */
     var makeArray = function(n, v) {
-        return Array.apply(null, new Array(n)).map(function() {
-            return v;
-        });
+        //return Array.apply(null, new Array(n)).map(function() {
+        //    return v;
+        //});
+        var rtn = new Array(n);
+        if (typeof v === "function") {
+            for (var i = 0, l = n; i < l; i++) {
+                rtn[i] = v(rtn[i], i);
+            }
+        } else {
+            for (var i = 0, l = n; i < l; i++) {
+                rtn[i] = v;
+            }
+        }
+        return rtn;
     };
 
     /**
@@ -352,13 +423,13 @@
             group = 0;
 
         // give elements from the same subset the same group number
-        stable.forEach(function(subset) {
+        forEach(stable, function(subset) {
             var i, endOld = subset.old + subset.length,
-                endNew = subset.new + subset.length;
+                endNew = subset.newer + subset.length;
             for (i = subset.old; i < endOld; i += 1) {
                 gaps1[i] = group;
             }
-            for (i = subset.new; i < endNew; i += 1) {
+            for (i = subset.newer; i < endNew; i += 1) {
                 gaps2[i] = group;
             }
             group += 1;
@@ -386,15 +457,15 @@
             },
             markBoth = function(i) {
                 marked1[subset.old + i] = true;
-                marked2[subset.new + i] = true;
+                marked2[subset.newer + i] = true;
             };
 
         while (subset) {
             subset = findCommonSubsets(oldChildren, newChildren, marked1, marked2);
             if (subset) {
-                subsets.push(subset);
-
-                Array.apply(null, new Array(subset.length)).map(returnIndex).forEach(markBoth);
+                subsets[subsets.length] = subset;
+                //Array.apply(null, new Array(subset.length)).map(returnIndex)
+                forEach(makeArray(subset.length, returnIndex), markBoth);
 
             }
         }
@@ -418,12 +489,12 @@
         list: false,
         add: function(diffs) {
             var list = this.list;
-            diffs.forEach(function(diff) {
-                list.push(diff);
+            forEach(diffs, function(diff) {
+                list[list.length] = diff;
             });
         },
         forEach: function(fn) {
-            this.list.forEach(fn);
+            forEach(this.list, fn);
         }
     };
 
@@ -578,13 +649,13 @@
             }
 
 
-            attr1 = t1.attributes ? Object.keys(t1.attributes).sort() : [];
-            attr2 = t2.attributes ? Object.keys(t2.attributes).sort() : [];
+            attr1 = t1.attributes ? ObjectKeys(t1.attributes).sort() : [];
+            attr2 = t2.attributes ? ObjectKeys(t2.attributes).sort() : [];
 
-            attr1.forEach(function(attr) {
-                var pos = attr2.indexOf(attr);
+            forEach(attr1, function(attr) {
+                var pos = indexOf(attr2, attr);
                 if (pos === -1) {
-                    diffs.push(new Diff({
+                    diffs[diffs.length] = (new Diff({
                         action: 'removeAttribute',
                         route: route,
                         name: attr,
@@ -593,7 +664,7 @@
                 } else {
                     attr2.splice(pos, 1);
                     if (t1.attributes[attr] !== t2.attributes[attr]) {
-                        diffs.push(new Diff({
+                        diffs[diffs.length] = (new Diff({
                             action: 'modifyAttribute',
                             route: route,
                             name: attr,
@@ -606,8 +677,8 @@
             });
 
 
-            attr2.forEach(function(attr) {
-                diffs.push(new Diff({
+            forEach(attr2, function(attr) {
+                diffs[diffs.length] = (new Diff({
                     action: 'addAttribute',
                     route: route,
                     name: attr,
@@ -626,17 +697,34 @@
             } else {
                 if (node.attributes && node.attributes.length > 0) {
                     objNode.attributes = {};
-                    Array.prototype.slice.call(node.attributes).forEach(
+                    var attributes = [];
+                    if (node.attributes.item) {
+                        for (var i = 0, l = node.attributes.length; i < l; i++) {
+                            attributes[attributes.length] = (node.attributes.item(i));
+                        }
+                    } else {
+                        attributes = node.attributes;
+                    }
+                    forEach(Array.prototype.slice.call(attributes), 
                         function(attribute) {
                             objNode.attributes[attribute.name] = attribute.value;
                         }
                     );
+                    if (objNode.attributes["sync"] === "false") objNode.sync = false;
                 }
-                if (node.childNodes && node.childNodes.length > 0) {
+                if (node.childNodes && node.childNodes.length > 0 && objNode.sync !== false) {
                     objNode.childNodes = [];
-                    Array.prototype.slice.call(node.childNodes).forEach(
+                    var childnodes = [];
+                    if (node.childNodes.item) {
+                        for (var i = 0, l = node.childNodes.length; i < l; i++) {
+                            childnodes[childnodes.length] = (node.childNodes.item(i));
+                        }
+                    } else {
+                        childnodes = node.childnodes;
+                    }
+                    forEach(Array.prototype.slice.call(childnodes),
                         function(childNode) {
-                            objNode.childNodes.push(dobj.nodeToObj(childNode));
+                            objNode.childNodes[objNode.childNodes.length] = (dobj.nodeToObj(childNode));
                         }
                     );
                 }
@@ -670,12 +758,12 @@
                     node = document.createElement(objNode.nodeName);
                 }
                 if (objNode.attributes) {
-                    Object.keys(objNode.attributes).forEach(function(attribute) {
+                    forEach(ObjectKeys(objNode.attributes), function(attribute) {
                         node.setAttribute(attribute, objNode.attributes[attribute]);
                     });
                 }
                 if (objNode.childNodes) {
-                    objNode.childNodes.forEach(function(childNode) {
+                    forEach(objNode.childNodes, function(childNode) {
                         node.appendChild(dobj.objToNode(childNode, insideSvg));
                     });
                 }
@@ -731,14 +819,14 @@
                      * and remove as necessary to obtain the same length */
                     if (e1 && !e2) {
                         if (e1.nodeName === '#text') {
-                            diffs.push(new Diff({
+                            diffs[diffs.length] = (new Diff({
                                 action: 'removeTextElement',
                                 route: route.concat(index),
                                 value: e1.data
                             }));
                             index -= 1;
                         } else {
-                            diffs.push(new Diff({
+                            diffs[diffs.length] = (new Diff({
                                 action: 'removeElement',
                                 route: route.concat(index),
                                 element: cloneObj(e1)
@@ -748,13 +836,13 @@
 
                     } else if (e2 && !e1) {
                         if (e2.nodeName === '#text') {
-                            diffs.push(new Diff({
+                            diffs[diffs.length] = (new Diff({
                                 action: 'addTextElement',
                                 route: route.concat(index),
                                 value: e2.data
                             }));
                         } else {
-                            diffs.push(new Diff({
+                            diffs[diffs.length] = (new Diff({
                                 action: 'addElement',
                                 route: route.concat(index),
                                 element: cloneObj(e2)
@@ -814,7 +902,7 @@
                                 }
                             }
                             if (!similarNode) {
-                                diffs.push(new Diff({
+                                diffs[diffs.length] = (new Diff({
                                     action: 'modifyTextElement',
                                     route: route.concat(index2),
                                     oldValue: node.data,
@@ -822,7 +910,7 @@
                                 }));
                             }
                         }
-                        diffs.push(new Diff({
+                        diffs[diffs.length] = (new Diff({
                             action: 'removeTextElement',
                             route: route.concat(index2),
                             value: node.data
@@ -831,7 +919,7 @@
                         shortest = Math.min(gaps1.length, gaps2.length);
                         index2 -= 1;
                     } else {
-                        diffs.push(new Diff({
+                        diffs[diffs.length] = (new Diff({
                             action: 'removeElement',
                             route: route.concat(index2),
                             element: cloneObj(node)
@@ -844,7 +932,7 @@
                 } else if (gaps2[index2] === true) {
                     node = t2.childNodes[index2];
                     if (node.nodeName === '#text') {
-                        diffs.push(new Diff({
+                        diffs[diffs.length] = (new Diff({
                             action: 'addTextElement',
                             route: route.concat(index2),
                             value: node.data
@@ -853,7 +941,7 @@
                         shortest = Math.min(gaps1.length, gaps2.length);
                         index1 -= 1;
                     } else {
-                        diffs.push(new Diff({
+                        diffs[diffs.length] = (new Diff({
                             action: 'addElement',
                             route: route.concat(index2),
                             element: cloneObj(node)
@@ -869,7 +957,7 @@
                     }
                     // group relocation
                     group = subtrees[gaps1[index2]];
-                    toGroup = Math.min(group.new, (t1.childNodes.length - group.length));
+                    toGroup = Math.min(group.newer, (t1.childNodes.length - group.length));
                     if (toGroup !== group.old) {
                         // Check whether destination nodes are different than originating ones.
                         destinationDifferent = false;
@@ -900,7 +988,7 @@
             var diffs = [];
 
             if (t1.selected !== t2.selected) {
-                diffs.push(new Diff({
+                diffs[diffs.length] = (new Diff({
                     action: 'modifySelected',
                     oldValue: t1.selected,
                     newValue: t2.selected,
@@ -909,7 +997,7 @@
             }
 
             if ((t1.value || t2.value) && t1.value !== t2.value && t1.nodeName !== 'OPTION') {
-                diffs.push(new Diff({
+                diffs[diffs.length] = (new Diff({
                     action: 'modifyValue',
                     oldValue: t1.value,
                     newValue: t2.value,
@@ -917,7 +1005,7 @@
                 }));
             }
             if (t1.checked !== t2.checked) {
-                diffs.push(new Diff({
+                diffs[diffs.length] = (new Diff({
                     action: 'modifyChecked',
                     oldValue: t1.checked,
                     newValue: t2.checked,
@@ -935,7 +1023,7 @@
             if (diffs.length === 0) {
                 return true;
             }
-            diffs.forEach(function(diff) {
+            forEach(diffs, function(diff) {
                 //                              console.log(JSON.stringify(diff));
                 //                              console.log(JSON.stringify(tree));
                 //                              console.log(this.objToNode(tree).outerHTML);
@@ -998,7 +1086,7 @@
 
                     delete node.attributes[diff.name];
 
-                    if (Object.keys(node.attributes).length === 0) {
+                    if (ObjectKeys(node.attributes).length === 0) {
                         delete node.attributes;
                     }
 
@@ -1038,8 +1126,8 @@
                     parentNode.childNodes[nodeIndex] = newNode;
                     break;
                 case 'relocateGroup':
-                    node.childNodes.splice(diff.from, diff.groupLength).reverse()
-                        .forEach(function(movedNode) {
+                    forEach(node.childNodes.splice(diff.from, diff.groupLength).reverse()
+                        , function(movedNode) {
                             node.childNodes.splice(diff.to, 0, movedNode);
                         });
                     break;
@@ -1060,7 +1148,7 @@
                     }
 
                     if (c >= node.childNodes.length) {
-                        node.childNodes.push(newNode);
+                        node.childNodes[node.childNodes.length] = (newNode);
                     } else {
                         node.childNodes.splice(c, 0, newNode);
                     }
@@ -1083,7 +1171,7 @@
                     }
 
                     if (c >= node.childNodes.length) {
-                        node.childNodes.push(newNode);
+                        node.childNodes[node.childNodes.length] = (newNode);
                     } else {
                         node.childNodes.splice(c, 0, newNode);
                     }
@@ -1109,7 +1197,7 @@
             if (diffs.length === 0) {
                 return true;
             }
-            diffs.forEach(function(diff) {
+            forEach(diffs, function(diff) {
                 if (!dobj.applyDiff(tree, diff)) {
                     return false;
                 }
@@ -1185,13 +1273,13 @@
                     node.parentNode.replaceChild(this.objToNode(diff.newValue), node);
                     break;
                 case 'relocateGroup':
-                    Array.apply(null, new Array(diff.groupLength)).map(function() {
+                    forEach(Array.apply(null, new Array(diff.groupLength)).map(function() {
                         return node.removeChild(node.childNodes[diff.from]);
-                    }).forEach(function(childNode, index) {
+                    }), function(childNode, index) {
                         if (index === 0) {
                             reference = node.childNodes[diff.to];
                         }
-                        node.insertBefore(childNode, reference);
+                        node.insertBefore(childNode, reference || null);
                     });
                     break;
                 case 'removeElement':
@@ -1201,7 +1289,7 @@
                     route = diff.route.slice();
                     c = route.splice(route.length - 1, 1)[0];
                     node = this.getFromRoute(tree, route);
-                    node.insertBefore(this.objToNode(diff.element), node.childNodes[c]);
+                    node.insertBefore(this.objToNode(diff.element), node.childNodes[c] || null);
                     break;
                 case 'removeTextElement':
                     if (!node || node.nodeType !== 3) {
@@ -1217,7 +1305,7 @@
                     if (!node || !node.childNodes) {
                         return false;
                     }
-                    node.insertBefore(newNode, node.childNodes[c]);
+                    node.insertBefore(newNode, node.childNodes[c] || null);
                     break;
                 default:
                     console.log('unknown action');
@@ -1235,7 +1323,7 @@
                 diffs = [diffs];
             }
             diffs.reverse();
-            diffs.forEach(function(diff) {
+            forEach(diffs, function(diff) {
                 dobj.undoDiff(tree, diff);
             });
         },
